@@ -17,12 +17,67 @@ export default {
       return handleTelegramWebhook(request, env);
     }
 
+    // 资源注册 API 端点（供 mswnlz_publish 调用）
+    if (url.pathname === '/api/add' && request.method === 'POST') {
+      return handleApiAdd(request, env);
+    }
+
     return new Response('Not Found', { status: 404 });
   }
 };
 
 // 用于记录每个 chatId 的添加状态
 const addStateMap = new Map();
+
+/**
+ * 处理 API 资源注册请求
+ * POST /api/add
+ * Body: {"resource_name": "...", "resource_description": "...", "resource_link": "...", "resource_hint": "..."}
+ */
+async function handleApiAdd(request, env) {
+  try {
+    const body = await request.json();
+    const { resource_name, resource_description, resource_link, resource_hint } = body;
+
+    if (!resource_name || !resource_link) {
+      return new Response(JSON.stringify({
+        error: 'resource_name 和 resource_link 为必填字段'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const result = await env.DB.prepare(
+      'INSERT INTO pandata (resource_name, resource_description, resource_link, resource_hint) VALUES (?, ?, ?, ?)'
+    ).bind(
+      resource_name,
+      resource_description || '',
+      resource_link,
+      resource_hint || ''
+    ).run();
+
+    const resourceId = result.meta.last_row_id;
+    const start_link = `https://t.me/GoodStudyDayUpBot?start=${resourceId}`;
+
+    return new Response(JSON.stringify({
+      id: resourceId,
+      start_link
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Error in /api/add:', error);
+    return new Response(JSON.stringify({
+      error: '服务器内部错误'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
 
 /**
  * 处理 Telegram webhook 请求
