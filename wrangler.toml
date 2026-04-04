@@ -1,0 +1,28 @@
+name = "goodstudydayupbot-telegram-bot"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# D1 数据库绑定
+[[d1_databases]]
+binding = "DB"
+database_name = "db"
+database_id = "016ad095-68da-4899-b726-06007a6fef83"
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
+
+# 环境变量
+[vars]
+# TELEGRAM_BOT_TOKEN 将通过 wrangler secret 设置

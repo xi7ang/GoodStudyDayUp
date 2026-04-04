@@ -1,0 +1,21 @@
+{
+  "name": "goodstudydayupbot",
+  "version": "1.0.0",
+  "description": "Telegram Bot backend service for GoodStudyDayUpBot",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "cloudflare",
+    "worker"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
