@@ -142,7 +142,7 @@ async function handleTelegramWebhook(request, env) {
           `${TELEGRAM_API}/getChatMember?chat_id=${chatId}&user_id=${message.from.id}`
         );
         const memberData = await memberResp.json();
-        if (memberData.result && ['administrator', 'creator'].includes(memberData.result.status)) {
+        if (memberData.result?.status === 'administrator') {
           return new Response('OK', { status: 200 });
         }
       } catch (err) {
