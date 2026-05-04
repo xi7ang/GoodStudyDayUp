@@ -235,7 +235,7 @@ async function sendMessageWithReply(chatId, text, replyMarkup, env) {
       body: JSON.stringify({
         chat_id: chatId,
         text,
-        reply_markup,
+        reply_markup: replyMarkup,
       }),
     });
     if (!response.ok) {
