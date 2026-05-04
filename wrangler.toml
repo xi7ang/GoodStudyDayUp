@@ -26,3 +26,7 @@ head_sampling_rate = 1
 # 环境变量
 [vars]
 # TELEGRAM_BOT_TOKEN 将通过 wrangler secret 设置
+
+# 允许搜索功能的群组 ID（仅此群组的消息会触发搜索）
+[env.production.vars]
+ALLOWED_GROUP_ID = "-1002859199265"
