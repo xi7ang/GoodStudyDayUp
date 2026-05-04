@@ -86,6 +86,18 @@ async function handleTelegramWebhook(request, env) {
   try {
     const update = await request.json();
 
+    // ========== 回调按钮（分页翻页） ==========
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      const [action, query, page] = cb.data.split('|');
+
+      if (action === 'search') {
+        await handleSearch(cb.message.chat.id, query, parseInt(page), env, cb.id);
+        return new Response('OK', { status: 200 });
+      }
+      return new Response('OK', { status: 200 });
+    }
+
     // 检查是否是消息更新
     if (!update.message) {
       return new Response('OK', { status: 200 });
@@ -94,6 +106,11 @@ async function handleTelegramWebhook(request, env) {
     const message = update.message;
     const chatId = message.chat.id;
     const text = message.text;
+
+    // 安全过滤：仅处理允许的群组
+    if (env.ALLOWED_GROUP_ID && chatId.toString() !== env.ALLOWED_GROUP_ID) {
+      return new Response('OK', { status: 200 });
+    }
 
     // 检查是否处于添加资源状态
     if (addStateMap.get(chatId) === 'waiting_resource_info' && text) {
@@ -112,6 +129,16 @@ async function handleTelegramWebhook(request, env) {
     // 处理 /start 命令
     if (text && text.startsWith('/start')) {
       await handleStartCommand(chatId, text, env);
+      return new Response('OK', { status: 200 });
+    }
+
+    // ========== 普通消息 → 全文搜索 ==========
+    if (text && !text.startsWith('/')) {
+      const query = text.trim();
+      if (query.length >= 2) {
+        await handleSearch(chatId, query, 1, env);
+      }
+      return new Response('OK', { status: 200 });
     }
 
     return new Response('OK', { status: 200 });
@@ -119,6 +146,105 @@ async function handleTelegramWebhook(request, env) {
     console.error('Error processing webhook:', error);
     return new Response('Internal Server Error', { status: 500 });
   }
+}
+
+/**
+ * 处理搜索请求
+ */
+async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null) {
+  const pageSize = 5;
+  const offset = (page - 1) * pageSize;
+
+  // FTS5 全文搜索
+  const results = await env.DB.prepare(`
+    SELECT id, resource_name, resource_link
+    FROM pandata_fts
+    WHERE pandata_fts MATCH ?
+    LIMIT ? OFFSET ?
+  `).bind(query, pageSize, offset).all();
+
+  // 获取总数
+  const countResult = await env.DB.prepare(`
+    SELECT COUNT(*) as total FROM pandata_fts WHERE pandata_fts MATCH ?
+  `).bind(query).first();
+
+  const items = results.results || [];
+  const total = countResult?.total || 0;
+  const totalPages = Math.ceil(total / pageSize) || 1;
+
+  const message = formatSearchResults(query, { items, page, totalPages, total });
+  const replyMarkup = buildSearchKeyboard(query, page, totalPages);
+
+  await sendMessageWithReply(chatId, message, replyMarkup, env);
+
+  // 如果是回调查询，消除按钮按下状态
+  if (callbackQueryId) {
+    await answerCallback(callbackQueryId, env);
+  }
+}
+
+/**
+ * 格式化搜索结果
+ */
+function formatSearchResults(query, { items, page, totalPages, total }) {
+  if (!items || items.length === 0) {
+    return `🔍 搜索词：${query}\n\n❌ 未找到相关资源`;
+  }
+
+  let text = `🔍 搜索词：${query}\n📑 第 ${page}/${totalPages} 页 | 共 ${total} 条结果\n\n`;
+
+  const startNum = (page - 1) * 5;
+  items.forEach((item, i) => {
+    text += `${startNum + i + 1}. ${item.resource_name}\n链接：${item.resource_link}\n\n`;
+  });
+
+  return text.trim();
+}
+
+/**
+ * 生成分页按钮键盘
+ */
+function buildSearchKeyboard(query, page, totalPages) {
+  if (totalPages <= 1) return {};
+
+  const row = [];
+  if (page > 1) {
+    row.push({ text: '◀️ 上一页', callback_data: `search|${query}|${page - 1}` });
+  }
+  if (page < totalPages) {
+    row.push({ text: '下一页 ▶️', callback_data: `search|${query}|${page + 1}` });
+  }
+
+  if (row.length === 0) return {};
+  return { inline_keyboard: [row] };
+}
+
+/**
+ * 发送带 reply_markup 的消息
+ */
+async function sendMessageWithReply(chatId, text, replyMarkup, env) {
+  const TELEGRAM_API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
+  await fetch(`${TELEGRAM_API}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      reply_markup,
+    }),
+  });
+}
+
+/**
+ * 消除回调按钮按下状态
+ */
+async function answerCallback(callbackQueryId, env) {
+  const TELEGRAM_API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
+  await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ callback_query_id: callbackQueryId }),
+  });
 }
 
 /**
