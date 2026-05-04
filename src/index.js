@@ -92,7 +92,7 @@ async function handleTelegramWebhook(request, env) {
       const [action, query, page] = cb.data.split('|');
 
       if (action === 'search') {
-        await handleSearch(cb.message.chat.id, query, parseInt(page), env, cb.id);
+        await handleSearch(cb.message.chat.id, query, parseInt(page), env, cb.id, cb.message.message_id);
         return new Response('OK', { status: 200 });
       }
       return new Response('OK', { status: 200 });
@@ -154,8 +154,14 @@ async function handleTelegramWebhook(request, env) {
 
 /**
  * 处理搜索请求
+ * @param {number} chatId - Telegram chat ID
+ * @param {string} query - 搜索关键词
+ * @param {number} page - 页码
+ * @param {object} env - Cloudflare env
+ * @param {string|null} callbackQueryId - 回调Query ID（分页按钮场景）
+ * @param {number|null} messageId - 消息ID（编辑原消息场景，传则为新消息）
  */
-async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null) {
+async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null, messageId = null) {
   const pageSize = 5;
   const offset = (page - 1) * pageSize;
 
@@ -179,7 +185,13 @@ async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null
   const message = formatSearchResults(query, { items, page, totalPages, total });
   const replyMarkup = buildSearchKeyboard(query, page, totalPages);
 
-  await sendMessageWithReply(chatId, message, replyMarkup, env);
+  if (messageId) {
+    // 分页按钮场景：编辑原消息（无翻页时不传 reply_markup，保留原按钮）
+    await editMessageText(chatId, messageId, message, totalPages > 1 ? replyMarkup : null, env);
+  } else {
+    // 普通搜索场景：发送新消息
+    await sendMessageWithReply(chatId, message, replyMarkup, env);
+  }
 
   // 如果是回调查询，消除按钮按下状态
   if (callbackQueryId) {
@@ -221,6 +233,30 @@ function buildSearchKeyboard(query, page, totalPages) {
 
   if (row.length === 0) return {};
   return { inline_keyboard: [row] };
+}
+
+/**
+ * 编辑已发送的消息（用于分页翻页）
+ */
+async function editMessageText(chatId, messageId, text, replyMarkup, env) {
+  const TELEGRAM_API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
+  try {
+    const response = await fetch(`${TELEGRAM_API}/editMessageText`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId,
+        text,
+        reply_markup: replyMarkup,
+      }),
+    });
+    if (!response.ok) {
+      console.error('editMessageText error:', await response.text());
+    }
+  } catch (err) {
+    console.error('editMessageText fetch error:', err);
+  }
 }
 
 /**
