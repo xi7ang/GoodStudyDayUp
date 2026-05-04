@@ -127,13 +127,28 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
 
-    // ========== 普通消息 → 全文搜索（仅限白名单群组）==========
+    // ========== 普通消息 → 全文搜索（仅限白名单群组，非管理员）==========
     // 安全过滤：仅允许的群组能触发搜索
     if (env.ALLOWED_GROUP_ID && chatId.toString() !== env.ALLOWED_GROUP_ID) {
       return new Response('OK', { status: 200 });
     }
 
+    // ========== 普通消息 → 全文搜索（仅限白名单群组，非管理员）==========
     if (text && !text.startsWith('/')) {
+      // 管理员和群主不触发搜索
+      try {
+        const TELEGRAM_API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
+        const memberResp = await fetch(
+          `${TELEGRAM_API}/getChatMember?chat_id=${chatId}&user_id=${message.from.id}`
+        );
+        const memberData = await memberResp.json();
+        if (memberData.result && ['administrator', 'creator'].includes(memberData.result.status)) {
+          return new Response('OK', { status: 200 });
+        }
+      } catch (err) {
+        console.error('getChatMember error:', err);
+      }
+
       const query = text.trim();
       if (query.length >= 2) {
         try {
