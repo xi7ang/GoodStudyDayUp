@@ -159,9 +159,9 @@ async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null
   const pageSize = 5;
   const offset = (page - 1) * pageSize;
 
-  // FTS5 全文搜索
+  // FTS5 全文搜索（使用 rowid 而非 id，FTS 虚拟表无 id 列）
   const results = await env.DB.prepare(`
-    SELECT id, resource_name, resource_link
+    SELECT rowid, resource_name, resource_link
     FROM pandata_fts
     WHERE pandata_fts MATCH ?
     LIMIT ? OFFSET ?
