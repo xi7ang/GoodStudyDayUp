@@ -136,7 +136,11 @@ async function handleTelegramWebhook(request, env) {
     if (text && !text.startsWith('/')) {
       const query = text.trim();
       if (query.length >= 2) {
-        await handleSearch(chatId, query, 1, env);
+        try {
+          await handleSearch(chatId, query, 1, env);
+        } catch (err) {
+          console.error('Search error:', err);
+        }
       }
       return new Response('OK', { status: 200 });
     }
@@ -224,15 +228,22 @@ function buildSearchKeyboard(query, page, totalPages) {
  */
 async function sendMessageWithReply(chatId, text, replyMarkup, env) {
   const TELEGRAM_API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      reply_markup,
-    }),
-  });
+  try {
+    const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        reply_markup,
+      }),
+    });
+    if (!response.ok) {
+      console.error('sendMessageWithReply error:', await response.text());
+    }
+  } catch (err) {
+    console.error('sendMessageWithReply fetch error:', err);
+  }
 }
 
 /**
@@ -240,11 +251,18 @@ async function sendMessageWithReply(chatId, text, replyMarkup, env) {
  */
 async function answerCallback(callbackQueryId, env) {
   const TELEGRAM_API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
-  await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ callback_query_id: callbackQueryId }),
-  });
+  try {
+    const response = await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId }),
+    });
+    if (!response.ok) {
+      console.error('answerCallback error:', await response.text());
+    }
+  } catch (err) {
+    console.error('answerCallback fetch error:', err);
+  }
 }
 
 /**
