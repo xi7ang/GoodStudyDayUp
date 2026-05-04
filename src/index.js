@@ -107,8 +107,16 @@ async function handleTelegramWebhook(request, env) {
     const chatId = message.chat.id;
     const text = message.text;
 
-    // 安全过滤：仅处理允许的群组
-    if (env.ALLOWED_GROUP_ID && chatId.toString() !== env.ALLOWED_GROUP_ID) {
+    // 处理 /start 命令（私聊和任何群组都可用）
+    if (text && text.startsWith('/start')) {
+      await handleStartCommand(chatId, text, env);
+      return new Response('OK', { status: 200 });
+    }
+
+    // 处理 /add 命令（任何地方都可用）
+    if (text && text.trim() === '/add') {
+      addStateMap.set(chatId, 'waiting_resource_info');
+      await sendMessage(chatId, '请按照以下格式发送资源信息', env);
       return new Response('OK', { status: 200 });
     }
 
@@ -119,20 +127,12 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
 
-    // 处理 /add 命令
-    if (text && text.trim() === '/add') {
-      addStateMap.set(chatId, 'waiting_resource_info');
-      await sendMessage(chatId, '请按照以下格式发送资源信息', env);
+    // ========== 普通消息 → 全文搜索（仅限白名单群组）==========
+    // 安全过滤：仅允许的群组能触发搜索
+    if (env.ALLOWED_GROUP_ID && chatId.toString() !== env.ALLOWED_GROUP_ID) {
       return new Response('OK', { status: 200 });
     }
 
-    // 处理 /start 命令
-    if (text && text.startsWith('/start')) {
-      await handleStartCommand(chatId, text, env);
-      return new Response('OK', { status: 200 });
-    }
-
-    // ========== 普通消息 → 全文搜索 ==========
     if (text && !text.startsWith('/')) {
       const query = text.trim();
       if (query.length >= 2) {
