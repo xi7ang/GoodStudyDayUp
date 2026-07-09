@@ -384,9 +384,10 @@ async function handleStartCommand(chatId, text, env) {
       return;
     }
 
-    // 格式化并发送资源信息
+    // 格式化并发送资源信息（带复制按钮）
     const formattedMessage = formatResourceMessage(resourceData);
-    await sendMessage(chatId, formattedMessage, env);
+    const replyMarkup = buildResourceInlineKeyboard(resourceData);
+    await sendMessageWithKeyboard(chatId, formattedMessage, replyMarkup, env);
 
   } catch (error) {
     console.error('Error handling start command:', error);
@@ -435,6 +436,27 @@ async function queryResourceById(askId, env) {
     console.error('Database query error:', error);
     return null;
   }
+}
+
+/**
+ * 构建资源详情的内联键盘（复制按钮）
+ */
+function buildResourceInlineKeyboard(resource) {
+  const copyTitle = resource.resource_name || '';
+  const copyFull = [
+    `📌资源名称：${resource.resource_name || ''}`,
+    `📝资源描述：${resource.resource_description || ''}`,
+    `🔗资源链接：${resource.resource_link || ''}`,
+    '',
+    '更多资源请访问 https://pan.devmini.space'
+  ].filter(Boolean).join('\n');
+
+  return {
+    inline_keyboard: [[
+      { text: '📋 一键复制标题', copy_text: { text: copyTitle } },
+      { text: '📋 一键复制全文', copy_text: { text: copyFull } },
+    ]]
+  };
 }
 
 /**
@@ -514,6 +536,38 @@ async function sendMessage(chatId, text, env) {
     return response;
   } catch (error) {
     console.error('Error sending message:', error);
+    throw error;
+  }
+}
+
+/**
+ * 发送带内联键盘的消息到 Telegram
+ */
+async function sendMessageWithKeyboard(chatId, text, replyMarkup, env) {
+  const TELEGRAM_API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
+
+  try {
+    const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'HTML',
+        reply_markup: replyMarkup,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('sendMessageWithKeyboard error:', error);
+    }
+
+    return response;
+  } catch (error) {
+    console.error('Error sending message with keyboard:', error);
     throw error;
   }
 }
