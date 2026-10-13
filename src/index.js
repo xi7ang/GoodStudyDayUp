@@ -439,38 +439,18 @@ async function queryResourceById(askId, env) {
 }
 
 /**
- * 从资源链接中提取域名（协议 + 主机名）
- * 例：https://mibear.top/resource.html?id=l2q0fb -> https://mibear.top
- * 链接缺失或无法解析时返回 fallback
- */
-function extractOriginFromLink(link, fallback = 'https://pan.devmini.space') {
-  if (!link) {
-    return fallback;
-  }
-
-  const value = String(link).trim();
-  const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-
-  try {
-    return new URL(withProtocol).origin;
-  } catch (error) {
-    console.error('Failed to parse resource link:', link, error);
-    return fallback;
-  }
-}
-
-/**
  * 构建资源详情的内联键盘（复制按钮）
  */
 function buildResourceInlineKeyboard(resource) {
   const copyTitle = resource.resource_name || '';
-  const resourceOrigin = extractOriginFromLink(resource.resource_link);
   const copyFull = [
     `📌资源名称：${resource.resource_name || ''}`,
     `📝资源描述：${resource.resource_description || ''}`,
     `🔗资源链接：${resource.resource_link || ''}`,
     '',
-    `更多资源请访问 ${resourceOrigin}`
+    '免费高清影视资源尽在devmini.space',
+    '精品端手游戏资源尽在devmini.space',
+    '备考办公素材资源尽在devmini.space'
   ].filter(Boolean).join('\n');
 
   return {
