@@ -442,16 +442,22 @@ async function queryResourceById(askId, env) {
  * 构建资源详情的内联键盘（复制按钮）
  */
 function buildResourceInlineKeyboard(resource) {
-  const copyTitle = resource.resource_name || '';
-  const copyFull = [
-    `📌资源名称：${resource.resource_name || ''}`,
-    `📝资源描述：${resource.resource_description || ''}`,
-    `🔗资源链接：${resource.resource_link || ''}`,
-    '',
+  // Telegram copy_text 按钮上限 256 字符，超了整条消息会被 400 拒掉（BUTTON_COPY_TEXT_INVALID）
+  const COPY_LIMIT = 256;
+  const promos = [
     '免费高清影视资源尽在devmini.space',
     '精品端手游戏资源尽在devmini.space',
     '备考办公素材资源尽在devmini.space'
-  ].filter(Boolean).join('\n');
+  ].join('\n');
+  const name = (resource.resource_name || '').slice(0, 80);
+  const link = (resource.resource_link || '').slice(0, 100);
+  const fixed = `📌资源名称：${name}\n📝资源描述：\n🔗资源链接：${link}\n\n${promos}`;
+  const budget = Math.max(0, COPY_LIMIT - fixed.length);
+  const desc = (resource.resource_description || '').slice(0, budget);
+
+  const copyTitle = name.slice(0, COPY_LIMIT);
+  const copyFull = `📌资源名称：${name}\n📝资源描述：${desc}\n🔗资源链接：${link}\n\n${promos}`
+    .slice(0, COPY_LIMIT);
 
   return {
     inline_keyboard: [[
