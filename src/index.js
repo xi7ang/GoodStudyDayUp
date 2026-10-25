@@ -441,17 +441,36 @@ async function queryResourceById(askId, env) {
 /**
  * 构建资源详情的内联键盘（复制按钮）
  */
+// Telegram 的 copy_text 按钮上限 256 字符；超了整条消息会被 400 拒掉
+// （BUTTON_COPY_TEXT_INVALID），用户看到的就是「点开 start=xxx 什么都没有」。
+const COPY_TEXT_LIMIT = 256;
+
+function clipCopyText(text, limit = COPY_TEXT_LIMIT) {
+  const s = String(text || '');
+  if (s.length <= limit) return s;
+  let out = '';
+  for (const ch of s) { // 按码点走，别劈开 emoji 的代理对
+    if (out.length + ch.length > limit) break;
+    out += ch;
+  }
+  return out;
+}
+
 function buildResourceInlineKeyboard(resource) {
-  const copyTitle = resource.resource_name || '';
-  const copyFull = [
-    `📌资源名称：${resource.resource_name || ''}`,
-    `📝资源描述：${resource.resource_description || ''}`,
-    `🔗资源链接：${resource.resource_link || ''}`,
-    '',
+  const promos = [
     '免费高清影视资源尽在devmini.space',
     '精品端手游戏资源尽在devmini.space',
     '备考办公素材资源尽在devmini.space'
-  ].filter(Boolean).join('\n');
+  ].join('\n');
+  const name = clipCopyText(resource.resource_name || '', 60);
+  const link = clipCopyText(resource.resource_link || '', 100);
+  const head = `📌资源名称：${name}\n📝资源描述：`;
+  const tail = `\n🔗资源链接：${link}\n\n${promos}`;
+  const budget = Math.max(0, COPY_TEXT_LIMIT - head.length - tail.length);
+  const desc = clipCopyText(resource.resource_description || '', budget);
+
+  const copyTitle = clipCopyText(resource.resource_name || '');
+  const copyFull = clipCopyText(`${head}${desc}${tail}`);
 
   return {
     inline_keyboard: [[
