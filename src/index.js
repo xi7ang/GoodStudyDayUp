@@ -14,7 +14,7 @@ export default {
 
     // Telegram webhook 端点
     if (url.pathname === '/webhook' && request.method === 'POST') {
-      return handleTelegramWebhook(request, env);
+      return handleTelegramWebhook(request, env, ctx);
     }
 
     // 资源注册 API 端点（供 mswnlz_publish 调用）
@@ -82,7 +82,7 @@ async function handleApiAdd(request, env) {
 /**
  * 处理 Telegram webhook 请求
  */
-async function handleTelegramWebhook(request, env) {
+async function handleTelegramWebhook(request, env, ctx) {
   try {
     const update = await request.json();
 
@@ -152,7 +152,7 @@ async function handleTelegramWebhook(request, env) {
       const query = text.trim();
       if (query.length >= 2) {
         try {
-          await handleSearch(chatId, query, 1, env);
+          await handleSearch(chatId, query, 1, env, null, null, ctx);
         } catch (err) {
           console.error('Search error:', err);
         }
@@ -176,7 +176,43 @@ async function handleTelegramWebhook(request, env) {
  * @param {string|null} callbackQueryId - 回调Query ID（分页按钮场景）
  * @param {number|null} messageId - 消息ID（编辑原消息场景，传则为新消息）
  */
-async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null, messageId = null) {
+// 搜索结果消息展示时长（毫秒）：发出后自动删除
+const SEARCH_RESULT_TTL_MS = 30000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function deleteMessage(chatId, messageId, env) {
+  const TELEGRAM_API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
+  try {
+    await fetch(`${TELEGRAM_API}/deleteMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+    });
+  } catch (error) {
+    console.error('deleteMessage error:', error);
+  }
+}
+
+// 搜索结果发出后 30 秒自动删除：webhook 先回 OK，删除在后台跑（ctx.waitUntil），
+// 不阻塞 webhook 响应，避免 Telegram 因响应超时重发 update 导致重复消息。
+// 注意：若平台提前回收后台任务，个别消息可能删不掉，属于可接受的软失败。
+function scheduleSearchResultDelete(chatId, sentResp, ctx, env) {
+  if (!ctx || !sentResp) return;
+  ctx.waitUntil((async () => {
+    try {
+      const data = await sentResp.json().catch(() => null);
+      const messageId = data?.result?.message_id;
+      if (!messageId) return;
+      await sleep(SEARCH_RESULT_TTL_MS);
+      await deleteMessage(chatId, messageId, env);
+    } catch (error) {
+      console.error('auto-delete error:', error);
+    }
+  })());
+}
+
+async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null, messageId = null, ctx = null) {
   const pageSize = 5;
   const offset = (page - 1) * pageSize;
 
@@ -207,10 +243,12 @@ async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null
 
   if (messageId) {
     // 分页按钮场景：编辑原消息（无翻页时不传 reply_markup，保留原按钮）
+    // 计时不重置：消息自首次发出起 30 秒后删除，翻页不延长
     await editMessageText(chatId, messageId, message, totalPages > 1 ? replyMarkup : null, env);
   } else {
-    // 普通搜索场景：发送新消息
-    await sendMessageWithReply(chatId, message, replyMarkup, env);
+    // 普通搜索场景：发送新消息，30 秒后自动删除
+    const sentResp = await sendMessageWithReply(chatId, message, replyMarkup, env);
+    scheduleSearchResultDelete(chatId, sentResp, ctx, env);
   }
 
   // 如果是回调查询，消除按钮按下状态
