@@ -180,18 +180,23 @@ async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null
   const pageSize = 5;
   const offset = (page - 1) * pageSize;
 
-  // FTS5 全文搜索（使用 rowid 而非 id，FTS 虚拟表无 id 列）
+  // 子串搜索：FTS5 默认分词器 unicode61 会把中文切成整个 token（如“赛博朋克2077”），
+  // MATCH 只能整 token 匹配，简称/前半截永远搜不到；改用 LIKE 对标题和描述做子串匹配。
+  // 转义 LIKE 通配符，避免用户输入里的 % _ \ 改变查询语义。
+  const escaped = query.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+  const likePattern = `%${escaped}%`;
   const results = await env.DB.prepare(`
-    SELECT rowid, resource_name, resource_link
-    FROM pandata_fts
-    WHERE pandata_fts MATCH ?
+    SELECT id, resource_name, resource_link
+    FROM pandata
+    WHERE (resource_name LIKE ? ESCAPE '\\' OR resource_description LIKE ? ESCAPE '\\')
     LIMIT ? OFFSET ?
-  `).bind(query, pageSize, offset).all();
+  `).bind(likePattern, likePattern, pageSize, offset).all();
 
   // 获取总数
   const countResult = await env.DB.prepare(`
-    SELECT COUNT(*) as total FROM pandata_fts WHERE pandata_fts MATCH ?
-  `).bind(query).first();
+    SELECT COUNT(*) as total FROM pandata
+    WHERE (resource_name LIKE ? ESCAPE '\\' OR resource_description LIKE ? ESCAPE '\\')
+  `).bind(likePattern, likePattern).first();
 
   const items = results.results || [];
   const total = countResult?.total || 0;
