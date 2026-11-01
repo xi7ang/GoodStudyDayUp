@@ -28,4 +28,4 @@ head_sampling_rate = 1
 # TELEGRAM_BOT_TOKEN 将通过 wrangler secret 设置
 
 # 允许搜索功能的群组 ID（仅此群组的消息会触发搜索）
-ALLOWED_GROUP_ID = "-1002859199265"
+ALLOWED_GROUP_ID = "-1003880283279"
