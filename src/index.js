@@ -238,6 +238,14 @@ async function handleSearch(chatId, query, page = 1, env, callbackQueryId = null
   const total = countResult?.total || 0;
   const totalPages = Math.ceil(total / pageSize) || 1;
 
+  // 仅当至少返回一条资源时才展示搜索结果消息；无结果时静默，不发“未找到”提示
+  if (items.length === 0) {
+    if (callbackQueryId) {
+      await answerCallback(callbackQueryId, env);
+    }
+    return;
+  }
+
   const message = formatSearchResults(query, { items, page, totalPages, total });
   const replyMarkup = buildSearchKeyboard(query, page, totalPages);
 
